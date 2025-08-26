@@ -3,255 +3,323 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Secure Note App</title>
-  <link rel="manifest" href="manifest.json" />
+  <title>Vaultlify – Secure Note App</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" />
   <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.0.2/dist/tesseract.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fuse.js@6.6.2"></script>
+  <!-- Mammoth.js for .docx -->
+<script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
+
+<!-- PDF.js for .pdf -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+
   <style>
-    body.dark-mode {
-        background-color: #121212;
-        color: #f1f1f1; }
-    .note-card {
-        margin-bottom: 1rem;
-    }
-    drop-zone { border: 2px dashed #ccc; padding: 20px; text-align: center; margin-bottom: 1rem; }
+    body.dark-mode { background-color: #121212; color: #f1f1f1; }
+    .note-card { margin-bottom: 1rem; }
+    #drop-zone { border: 2px dashed #ccc; padding: 20px; text-align: center; margin-bottom: 1rem; }
   </style>
 </head>
 <body class="bg-light">
-
 <div class="container py-4">
-  <div class="d-flex justify-content-center align-items-center mb-3">
-    <h2 style="text-align: center;">🔐VaultLify </h2>
-  </div>
+  <h2 class="text-center mb-3">🔐 VaultLify</h2>
 
+  <!-- Password Unlock -->
   <div class="mb-3">
     <input type="password" id="passwordInput" class="form-control" placeholder="Enter password to unlock notes" />
     <button class="btn btn-dark mt-2" onclick="unlockNotes()">Unlock</button>
   </div>
 
+  <!-- Folder & Tag Management -->
   <div class="mb-3">
-    <select id="folderSelect" class="form-select" onchange="renderNotes()">
-      <option value="">All Folders</option>
-    </select>
+    <select id="folderSelect" class="form-select" onchange="renderNotes()"> <option value="">All Folders</option> </select>
     <input type="text" id="newFolderInput" class="form-control mt-2" placeholder="Create new folder" />
-    <button class="btn btn-outline-primary mt-2" onclick="createFolder()">Add Folder</button>
+    <button class="btn btn-outline-primary mt-2" onclick="createFolderBtn()">Add Folder</button>
   </div>
 
+  <!-- Note Input -->
   <div class="mb-3">
     <textarea id="noteInput" class="form-control" rows="3" placeholder="Write your note..."></textarea>
     <input type="text" id="tagInput" class="form-control mt-2" placeholder="Tags (comma separated)" />
+    <input type="date" id="dateInput" class="form-control mt-2" />
     <div class="mt-2 d-flex gap-2 flex-wrap">
       <button class="btn btn-primary" onclick="saveNote()">Save Note</button>
       <button class="btn btn-info" onclick="startSpeechToText()">🎤 Voice Note</button>
-      <button class="btn btn-warning" onclick="document.getElementById('imageInput').click()">📷 Scan Image</button>
-      <input type="file" id="imageInput" accept="image/*" style="display:none" onchange="scanImage(this)" />
+      <!-- OCR Upload Button -->
+      <button class="btn btn-warning" onclick="triggerFileInput()">Scan Image</button>
+      <button class="btn btn-secondary" onclick="toggleDarkMode()">🌓 Toggle Theme</button>
+      
+<!-- Hidden File Input -->
+<input type="file" id="imageInput" accept="image/*" style="display:none" onchange="handleImageUpload(this)" />
     </div>
   </div>
 
-<!--   <div id="drop-zone" ondrop="handleDrop(event)" ondragover="event.preventDefault()">
-    Drag & Drop an image here to scan text
-  </div> -->
+  <!-- Search & Import/Export -->
+  <div class="mb-3 d-flex gap-2 flex-wrap">
+    <input type="text" id="searchInput" class="form-control" placeholder="Search notes..." oninput="searchNotes()" />
+    <button class="btn btn-outline-success" onclick="exportAllNotes()">Export All</button>
+    <input type="file" id="importInput" accept=".json" style="display:none" onchange="importNotes(this)" />
+    <button class="btn btn-outline-secondary" onclick="document.getElementById('importInput').click()">Import Notes</button>
+  </div>
 
+  <!-- Drag & Drop OCR -->
+  <div id="drop-zone" ondrop="handleDrop(event)" ondragover="event.preventDefault()">Drag & Drop an image here to scan text</div>
+
+  <!-- Notes Display -->
   <div id="notesContainer"></div>
 </div>
 
-<script>
-  let notes = [];
-  let folders = JSON.parse(localStorage.getItem('folders')) || [];
-  let password = '';
-  let editingId = null;
-
-  function toggleDarkMode() {
-    document.body.classList.toggle('dark-mode');
-  }
-
-  function createFolder() {
-    const folder = document.getElementById('newFolderInput').value.trim();
-    if (folder && !folders.includes(folder)) {
-      folders.push(folder);
-      localStorage.setItem('folders', JSON.stringify(folders));
-      updateFolderSelect();
-      document.getElementById('newFolderInput').value = '';
-    }
-  }
-
-  function updateFolderSelect() {
-    const select = document.getElementById('folderSelect');
-    select.innerHTML = `<option value="">All Folders</option>`;
-    folders.forEach(f => {
-      const opt = document.createElement('option');
-      opt.value = f;
-      opt.textContent = f;
-      select.appendChild(opt);
-    });
-  }
-
-  function unlockNotes() {
-    password = document.getElementById('passwordInput').value;
-    const encrypted = localStorage.getItem('secureNotes');
-    if (encrypted) {
-      try {
-        const decrypted = CryptoJS.AES.decrypt(encrypted, password).toString(CryptoJS.enc.Utf8);
-        notes = JSON.parse(decrypted);
-        renderNotes();
-      } catch {
-        alert("Incorrect password or corrupted data.");
-      }
-    }
-    updateFolderSelect();
-  }
-
-  function saveNote() {
-    const text = document.getElementById('noteInput').value.trim();
-    const tags = document.getElementById('tagInput').value.split(',').map(t => t.trim()).filter(Boolean);
-    const folder = document.getElementById('folderSelect').value;
-    if (!text || !password) return;
-
-    if (editingId) {
-      const index = notes.findIndex(n => n.id === editingId);
-      notes[index] = { text, tags, folder, id: editingId };
-      editingId = null;
-    } else {
-      notes.push({ text, tags, folder, id: Date.now() });
-    }
-
-    const encrypted = CryptoJS.AES.encrypt(JSON.stringify(notes), password).toString();
-    localStorage.setItem('secureNotes', encrypted);
-    document.getElementById('noteInput').value = '';
-    document.getElementById('tagInput').value = '';
-    renderNotes();
-  }
-
-  function renderNotes() {
-    const container = document.getElementById('notesContainer');
-    const selectedFolder = document.getElementById('folderSelect').value;
-    container.innerHTML = '';
-
-    notes.filter(n => !selectedFolder || n.folder === selectedFolder).forEach(note => {
-      const card = document.createElement('div');
-      card.className = 'card note-card';
-      card.innerHTML = `
-        <div class="card-body">
-          <p>${note.text}</p>
-          <small class="text-muted">Tags: ${note.tags.join(', ')} | Folder: ${note.folder}</small>
-          <div class="mt-2 d-flex gap-2 flex-wrap">
-            <button class="btn btn-sm btn-danger" onclick="deleteNote(${note.id})">Delete</button>
-            <button class="btn btn-sm btn-warning" onclick="editNote(${note.id})">Edit</button>
-            <button class="btn btn-sm btn-outline-secondary" onclick="exportNote(${note.id}, 'txt')">TXT</button>
-            <button class="btn btn-sm btn-outline-secondary" onclick="exportNote(${note.id}, 'doc')">DOC</button>
-            <button class="btn btn-sm btn-outline-secondary" onclick="exportNote(${note.id}, 'pdf')">PDF</button>
-          </div>
-        </div>
-      `;
-      container.appendChild(card);
-    });
-  }
-
-  function deleteNote(id) {
-    notes = notes.filter(n => n.id !== id);
-    const encrypted = CryptoJS.AES.encrypt(JSON.stringify(notes), password).toString();
-    localStorage.setItem('secureNotes', encrypted);
-    renderNotes();
-  }
-
-  function editNote(id) {
-    const note = notes.find(n => n.id === id);
-    document.getElementById('noteInput').value = note.text;
-    document.getElementById('tagInput').value = note.tags.join(', ');
-    document.getElementById('folderSelect').value = note.folder;
-    editingId = id;
-  }
-
-function scanImage(input) {
-  const file = input.files[0];
-  if (!file) return;
-
-  const img = new Image();
-  img.src = URL.createObjectURL(file);
-  img.onload = () => {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-
-    // Upscale for better resolution
-    const scale = 2;
-    canvas.width = img.width * scale;
-    canvas.height = img.height * scale;
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-    // Grayscale + thresholding
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const data = imageData.data;
-    for (let i = 0; i < data.length; i += 4) {
-      const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
-      const threshold = avg > 130 ? 255 : 0;
-      data[i] = data[i + 1] = data[i + 2] = threshold;
-    }
-    ctx.putImageData(imageData, 0, 0);
-
-    // Run OCR with handwriting-friendly config
-    Tesseract.recognize(canvas.toDataURL(), 'eng', {
-      logger: m => console.log(m),
-      tessedit_char_whitelist: '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.,!?()[]{}:;\'"- ',
-      preserve_interword_spaces: 1,
-      oem: 1, // LSTM OCR engine
-      psm: 6  // Assume a block of text
-    }).then(({ data: { text } }) => {
-      document.getElementById('noteInput').value = text || 'No text detected.';
-    }).catch(err => {
-      console.warn('OCR issue:', err);
-      document.getElementById('noteInput').value = 'Unable to extract text.';
-    });
-  };
-}
-
-
-  function handleDrop(event) {
-    event.preventDefault();
-    const file = event.dataTransfer.files[0];
-    if (file && file.type.startsWith('image/')) {
-      scanImage({ files: [file] });
-    }
-  }
-
-  function startSpeechToText() {
-    if (!('webkitSpeechRecognition' in window)) {
-      alert("Speech recognition not supported.");
-      return;
-    }
-    const recognition = new webkitSpeechRecognition();
-    recognition.lang = 'en-US';
-    recognition.onresult = e => {
-      document.getElementById('noteInput').value += ' ' + e.results[0][0].transcript;
-    };
-    recognition.start();
-  }
-
-  async function exportNote(id, format) {
-    const note = notes.find(n => n.id === id);
-    const content = `Note:\n${note.text}\n\nTags: ${note.tags.join(', ')}\nFolder: ${note.folder}`;
-    if (format === 'txt' || format === 'doc') {
-      const blob = new Blob([content], { type: 'text/plain' });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = `note_${id}.${format}`;
-      link.click();
-    } else if (format === 'pdf') {
-      const { jsPDF } = window.jspdf;
-      const doc = new jsPDF();
-      doc.text(content, 10, 10);
-      doc.save(`note_${id}.pdf`);
-    }
-    }
-</script>
+<!-- Modular Scripts -->
+<script src="notes.js"></script>
+<script src="ui.js"></script>
+<script src="ocr.js"></script>
+<script src="search.js"></script>
+<script src="theme.js"></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/service-worker.js')
-      .then(() => console.log('Service Worker registered successfully'))
-      .catch(error => console.error('Service Worker registration failed:', error));
+      .then(() => console.log('Service Worker registered'))
+      .catch(err => console.error('SW registration failed:', err));
   }
 </script>
+<script>
+  function getSelectedNotes() {
+  const selectedIds = Array.from(document.querySelectorAll('.note-select:checked'))
+    .map(cb => cb.value);
+
+  return notes.filter(note => selectedIds.includes(note.id.toString()));
+}
+
+function exportSelectedNotes() {
+  const format = prompt("Choose export format: pdf, txt, doc, docx").toLowerCase();
+  if (!['pdf', 'txt', 'doc', 'docx'].includes(format)) {
+    alert("Unsupported format. Please choose pdf, txt, doc, or docx.");
+    return;
+  }
+
+  const selectedNotes = getSelectedNotes();
+  if (selectedNotes.length === 0) {
+    alert("No notes selected.");
+    return;
+  }
+
+  if (format === 'pdf') {
+    exportAsPDF(selectedNotes);
+  } else {
+    exportAsText(selectedNotes, format);
+  }
+}
+
+function formatNoteForExport(note, index = null) {
+  const title = index !== null ? `Note ${index + 1}` : `Note`;
+  const divider = '========================================';
+
+  return `
+${title}
+${divider}
+Text:
+${note.text.trim()}
+
+Tags: ${note.tags.join(', ')}
+Folder: ${note.folder}
+Date: ${new Date(note.date).toLocaleDateString()}
+
+${divider}\n`;
+}
+
+function exportAsPDF(selectedNotes) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  let y = 10;
+
+  selectedNotes.forEach((note, i) => {
+    const content = formatNoteForExport(note, i);
+    const lines = doc.splitTextToSize(content, 180);
+    doc.text(lines, 10, y);
+    y += lines.length * 7;
+
+    if (y > 270 && i < selectedNotes.length - 1) {
+      doc.addPage();
+      y = 10;
+    }
+  });
+
+  doc.save('selected_notes.pdf');
+}
+
+function exportAsText(selectedNotes, format) {
+  const content = selectedNotes.map((note, i) => formatNoteForExport(note, i)).join('\n');
+  let mimeType = 'text/plain';
+
+  if (format === 'doc' || format === 'docx') {
+    mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  }
+
+  const blob = new Blob([content], { type: mimeType });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `selected_notes.${format}`;
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
+</script>
+<script>
+  function exportNote(id, format) {
+  const note = notes.find(n => n.id === id);
+  if (!note) return alert('Note not found.');
+
+  const title = `Note_${note.id}`;
+  const content = `
+Title: ${title}
+Date: ${new Date(note.date).toLocaleDateString()}
+Folder: ${note.folder}
+Tags: ${note.tags.join(', ')}
+
+========================================
+${note.text}
+========================================
+Exported on: ${new Date().toLocaleString()}
+`;
+
+  if (format === 'pdf') {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    const lines = doc.splitTextToSize(content, 180);
+    doc.text(lines, 10, 10);
+    doc.save(`${title}.pdf`);
+  } else {
+    let mimeType = 'text/plain';
+    if (format === 'doc' || format === 'docx') {
+      mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    }
+
+    const blob = new Blob([content], { type: mimeType });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `${title}.${format}`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  }
+}
+
+</script>
+<script>
+function importNotes(input) {
+  const file = input.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  const noteInput = document.getElementById('noteInput');
+
+  const ext = file.name.split('.').pop().toLowerCase();
+
+  if (ext === 'txt') {
+    reader.onload = function (e) {
+      noteInput.value = e.target.result;
+    };
+    reader.readAsText(file);
+  }
+
+  else if (ext === 'docx') {
+    reader.onload = function (e) {
+      mammoth.extractRawText({ arrayBuffer: e.target.result })
+        .then(result => {
+          noteInput.value = result.value;
+        })
+        .catch(err => {
+          alert("Error reading DOCX file.");
+          console.error(err);
+        });
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  else if (ext === 'pdf') {
+    const pdfjsLib = window['pdfjs-dist/build/pdf'];
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+
+    reader.onload = function (e) {
+      const typedArray = new Uint8Array(e.target.result);
+      pdfjsLib.getDocument(typedArray).promise.then(pdf => {
+        let textContent = '';
+        const maxPages = pdf.numPages;
+        const pagePromises = [];
+
+        for (let i = 1; i <= maxPages; i++) {
+          pagePromises.push(
+            pdf.getPage(i).then(page => page.getTextContent())
+              .then(content => {
+                const strings = content.items.map(item => item.str);
+                textContent += strings.join(' ') + '\n\n';
+              })
+          );
+        }
+
+        Promise.all(pagePromises).then(() => {
+          noteInput.value = textContent;
+        });
+      }).catch(err => {
+        alert("Error reading PDF file.");
+        console.error(err);
+      });
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  else if (ext === 'doc') {
+    alert("DOC format is not natively supported in browsers. Please convert to DOCX or TXT.");
+  }
+
+  else {
+    alert("Unsupported file type. Please upload a .txt, .docx, or .pdf file.");
+  }
+}
+</script>
+<script>
+  async function scanImageWithOCRSpace(file) {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('apikey', 'K83174371688957'); // 🔐 Replace with your actual key
+    formData.append('language', 'eng'); // 🌐 Change to other languages if needed
+    formData.append('isOverlayRequired', 'false'); // 🖼️ Bounding boxes not needed
+    formData.append('isHandwriting', 'true'); // ✍️ Enables handwriting recognition
+    formData.append('detectOrientation', 'true'); // 🔄 Auto-rotate if needed
+    formData.append('scale', 'true'); // ✂️ Auto-crop and scale image
+
+    try {
+      const response = await fetch('https://api.ocr.space/parse/image', {
+        method: 'POST',
+        body: formData
+      });
+
+      const result = await response.json();
+
+      const parsedText = result?.ParsedResults?.[0]?.ParsedText?.trim();
+      const fallbackMessage = '⚠️ No readable text was found in the image. Try a clearer photo or better lighting.';
+
+      document.getElementById('noteInput').value = parsedText || fallbackMessage;
+    } catch (err) {
+      console.error('OCR.space error:', err);
+      alert('❌ Failed to scan image. Please try again.');
+    }
+  }
+
+  function handleImageUpload(input) {
+    const file = input.files[0];
+    if (file) {
+      scanImageWithOCRSpace(file);
+    }
+  }
+
+  function triggerFileInput() {
+    document.getElementById('imageInput').click();
+  }
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="export.js"></script>
 </body>
 </html>
-
