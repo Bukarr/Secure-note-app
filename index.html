@@ -19,8 +19,7 @@
 
 <div class="container py-4">
   <div class="d-flex justify-content-between align-items-center mb-3">
-    <h2>🔐 Secure Note App</h2>
-    <button class="btn btn-secondary" onclick="toggleDarkMode()">Toggle Dark Mode</button>
+    <h2 style="text-align: center;">🔐Vaultlify </h2>
   </div>
 
   <div class="mb-3">
@@ -162,12 +161,49 @@
   }
 
   function scanImage(input) {
-    const file = input.files[0];
-    if (!file) return;
-    Tesseract.recognize(file, 'eng').then(({ data: { text } }) => {
+  const file = input.files[0];
+  if (!file) return;
+
+  const img = new Image();
+  img.src = URL.createObjectURL(file);
+  img.onload = () => {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+
+    // Resize image to improve OCR accuracy
+    const scale = 2; // upscale for better resolution
+    canvas.width = img.width * scale;
+    canvas.height = img.height * scale;
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+    // Convert to grayscale and enhance contrast
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    for (let i = 0; i < imageData.data.length; i += 4) {
+      const r = imageData.data[i];
+      const g = imageData.data[i + 1];
+      const b = imageData.data[i + 2];
+      const avg = (r + g + b) / 3;
+
+      // Apply thresholding for contrast
+      const threshold = avg > 128 ? 255 : 0;
+      imageData.data[i] = imageData.data[i + 1] = imageData.data[i + 2] = threshold;
+    }
+    ctx.putImageData(imageData, 0, 0);
+
+    // Run OCR with enhanced config
+    Tesseract.recognize(canvas.toDataURL(), 'eng', {
+      logger: m => console.log(m),
+      tessedit_char_whitelist: '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.,!?()[]{}:;\'"- ',
+      preserve_interword_spaces: 1
+    }).then(({ data: { text } }) => {
       document.getElementById('noteInput').value = text;
+    }).catch(err => {
+      console.error('OCR failed:', err);
+      alert('OCR failed. Try a clearer image.');
     });
-  }
+  };
+}
+
 
   function handleDrop(event) {
     event.preventDefault();
