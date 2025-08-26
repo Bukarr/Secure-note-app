@@ -10,15 +10,19 @@
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.0.2/dist/tesseract.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
-    body.dark-mode { background-color: #121212; color: #f1f1f1; }
-    .note-card { margin-bottom: 1rem; }
-    #drop-zone { border: 2px dashed #ccc; padding: 20px; text-align: center; margin-bottom: 1rem; }
+    body.dark-mode {
+        background-color: #121212;
+        color: #f1f1f1; }
+    .note-card {
+        margin-bottom: 1rem;
+    }
+    drop-zone { border: 2px dashed #ccc; padding: 20px; text-align: center; margin-bottom: 1rem; }
   </style>
 </head>
 <body class="bg-light">
 
 <div class="container py-4">
-  <div class="d-flex justify-content-between align-items-center mb-3">
+  <div class="d-flex justify-content-center align-items-center mb-3">
     <h2 style="text-align: center;">🔐Vaultlify </h2>
   </div>
 
@@ -160,7 +164,7 @@
     editingId = id;
   }
 
-  function scanImage(input) {
+function scanImage(input) {
   const file = input.files[0];
   if (!file) return;
 
@@ -170,36 +174,34 @@
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
 
-    // Resize image to improve OCR accuracy
-    const scale = 2; // upscale for better resolution
+    // Upscale for better resolution
+    const scale = 2;
     canvas.width = img.width * scale;
     canvas.height = img.height * scale;
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-    // Convert to grayscale and enhance contrast
+    // Grayscale + thresholding
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    for (let i = 0; i < imageData.data.length; i += 4) {
-      const r = imageData.data[i];
-      const g = imageData.data[i + 1];
-      const b = imageData.data[i + 2];
-      const avg = (r + g + b) / 3;
-
-      // Apply thresholding for contrast
-      const threshold = avg > 128 ? 255 : 0;
-      imageData.data[i] = imageData.data[i + 1] = imageData.data[i + 2] = threshold;
+    const data = imageData.data;
+    for (let i = 0; i < data.length; i += 4) {
+      const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
+      const threshold = avg > 130 ? 255 : 0;
+      data[i] = data[i + 1] = data[i + 2] = threshold;
     }
     ctx.putImageData(imageData, 0, 0);
 
-    // Run OCR with enhanced config
+    // Run OCR with handwriting-friendly config
     Tesseract.recognize(canvas.toDataURL(), 'eng', {
       logger: m => console.log(m),
       tessedit_char_whitelist: '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.,!?()[]{}:;\'"- ',
-      preserve_interword_spaces: 1
+      preserve_interword_spaces: 1,
+      oem: 1, // LSTM OCR engine
+      psm: 6  // Assume a block of text
     }).then(({ data: { text } }) => {
-      document.getElementById('noteInput').value = text;
+      document.getElementById('noteInput').value = text || 'No text detected.';
     }).catch(err => {
-      console.error('OCR failed:', err);
-      alert('OCR failed. Try a clearer image.');
+      console.warn('OCR issue:', err);
+      document.getElementById('noteInput').value = 'Unable to extract text.';
     });
   };
 }
