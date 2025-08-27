@@ -23,7 +23,7 @@
 </head>
 <body class="bg-light">
 <div class="container py-4">
-  <h2 class="text-center mb-3">🔐 VaultLify</h2>
+  <h2 class="text-center mb-3">🔐 Vaultlify</h2>
 
   <!-- Password Unlock -->
   <div class="mb-3">
@@ -166,28 +166,58 @@ function exportAsText(selectedNotes, format) {
 
 </script>
 <script>
-  function exportNote(id, format) {
+function exportNote(id, format) {
   const note = notes.find(n => n.id === id);
   if (!note) return alert('Note not found.');
 
   const title = `Note_${note.id}`;
-  const content = `
-Title: ${title}
-Date: ${new Date(note.date).toLocaleDateString()}
-Folder: ${note.folder}
-Tags: ${note.tags.join(', ')}
-
-========================================
-${note.text}
-========================================
-Exported on: ${new Date().toLocaleString()}
-`;
+  const header = `Title: ${title}\nDate: ${new Date(note.date).toLocaleDateString()}\nFolder: ${note.folder}\nTags: ${note.tags.join(', ')}\n\n========================================\n`;
+  const footer = `\n========================================\nExported on: ${new Date().toLocaleString()}`;
+  const fullContent = `${header}${note.text}${footer}`;
 
   if (format === 'pdf') {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
-    const lines = doc.splitTextToSize(content, 180);
-    doc.text(lines, 10, 10);
+
+    // Layout settings
+    const pageWidth = doc.internal.pageSize.width;
+    const pageHeight = doc.internal.pageSize.height;
+    const marginLeft = 20;
+    const marginTop = 20;
+    const marginBottom = 20;
+    const lineHeight = 7; // More compact spacing
+    const titleFontSize = 16;
+    const bodyFontSize = 12;
+    const footerFontSize = 10;
+    const maxLinesPerPage = Math.floor((pageHeight - marginTop - marginBottom - 30) / lineHeight);
+
+    const lines = doc.splitTextToSize(fullContent, pageWidth - marginLeft * 2);
+    let currentLine = 0;
+    let pageNum = 1;
+
+    while (currentLine < lines.length) {
+      if (pageNum > 1) doc.addPage();
+
+      // Title styling
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(titleFontSize);
+      doc.text(`Note Export: ${title}`, marginLeft, marginTop);
+
+      // Body styling
+      doc.setFont('times', 'normal');
+      doc.setFontSize(bodyFontSize);
+      const pageLines = lines.slice(currentLine, currentLine + maxLinesPerPage);
+      doc.text(pageLines, marginLeft, marginTop + 10);
+
+      // Footer with page number
+      doc.setFont('courier', 'italic');
+      doc.setFontSize(footerFontSize);
+      doc.text(`Page ${pageNum}`, pageWidth - marginLeft, pageHeight - 10, { align: 'right' });
+
+      currentLine += maxLinesPerPage;
+      pageNum++;
+    }
+
     doc.save(`${title}.pdf`);
   } else {
     let mimeType = 'text/plain';
@@ -195,7 +225,7 @@ Exported on: ${new Date().toLocaleString()}
       mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
     }
 
-    const blob = new Blob([content], { type: mimeType });
+    const blob = new Blob([fullContent], { type: mimeType });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
     link.download = `${title}.${format}`;
@@ -203,6 +233,59 @@ Exported on: ${new Date().toLocaleString()}
     URL.revokeObjectURL(link.href);
   }
 }
+
+</script>
+<script>
+  import jsPDF from "jspdf";
+
+export const exportNotesToPDF = (notes) => {
+  const doc = new jsPDF();
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const marginLeft = 20;
+  const marginTop = 20;
+  const marginBottom = 20;
+  const lineHeight = 10;
+  const fontSize = 12;
+
+  doc.setFontSize(fontSize);
+
+  let cursorY = marginTop;
+
+  notes.forEach((note, index) => {
+    const title = `Note ${index + 1}`;
+    const content = note.content || "";
+
+    // Add title
+    doc.setFont(undefined, "bold");
+    doc.text(title, marginLeft, cursorY);
+    cursorY += lineHeight;
+
+    // Add content
+    doc.setFont(undefined, "normal");
+    const usableWidth = pageWidth - marginLeft * 2;
+    const lines = doc.splitTextToSize(content, usableWidth);
+
+    lines.forEach((line) => {
+      if (cursorY + lineHeight > pageHeight - marginBottom) {
+        doc.addPage();
+        cursorY = marginTop;
+      }
+      doc.text(line, marginLeft, cursorY);
+      cursorY += lineHeight;
+    });
+
+    // Add spacing between notes
+    cursorY += lineHeight;
+    if (cursorY > pageHeight - marginBottom) {
+      doc.addPage();
+      cursorY = marginTop;
+    }
+  });
+
+  doc.save("My_Notes.pdf");
+};
 
 </script>
 <script>
