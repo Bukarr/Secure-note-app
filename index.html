@@ -187,7 +187,7 @@ function exportNote(id, format) {
     const marginBottom = 20;
     const lineHeight = 7; // More compact spacing
     const titleFontSize = 20;
-    const bodyFontSize = 16;
+    const bodyFontSize = 18;
     const footerFontSize = 10;
     const maxLinesPerPage = Math.floor((pageHeight - marginTop - marginBottom - 30) / lineHeight);
 
@@ -245,7 +245,7 @@ export const exportNotesToPDF = (notes) => {
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 25;
   const usableWidth = pageWidth - margin * 2;
-  const fontSize = 16;
+  const fontSize = 18;
   const lineHeight = 10;
 
   doc.setFontSize(fontSize);
@@ -422,3 +422,4 @@ function importNotes(input) {
 <script src="export.js"></script>
 </body>
 </html>
+
