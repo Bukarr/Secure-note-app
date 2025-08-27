@@ -23,7 +23,7 @@
 </head>
 <body class="bg-light">
 <div class="container py-4">
-  <h2 class="text-center mb-3">🔐 Vaultlify</h2>
+  <h2 class="text-center mb-3">🔐 VaultLify</h2>
 
   <!-- Password Unlock -->
   <div class="mb-3">
@@ -186,8 +186,8 @@ function exportNote(id, format) {
     const marginTop = 20;
     const marginBottom = 20;
     const lineHeight = 7; // More compact spacing
-    const titleFontSize = 16;
-    const bodyFontSize = 12;
+    const titleFontSize = 20;
+    const bodyFontSize = 16;
     const footerFontSize = 10;
     const maxLinesPerPage = Math.floor((pageHeight - marginTop - marginBottom - 30) / lineHeight);
 
@@ -245,7 +245,7 @@ export const exportNotesToPDF = (notes) => {
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 25;
   const usableWidth = pageWidth - margin * 2;
-  const fontSize = 12;
+  const fontSize = 16;
   const lineHeight = 10;
 
   doc.setFontSize(fontSize);
